@@ -1,0 +1,23 @@
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: burr-sb-git-source
+spec:
+  type: git
+  params: 
+  - name: url
+    value: https://github.com/burrsutter/knative-burr-greeter
+  - name: revision
+    value: master
+---
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: burr-sb-greeter-image
+spec:
+  type: image
+  params: 
+  - name: url
+    value: "dev.local/rhdevelopers/burr-sb-greeter"
+    # if you are on OpenShift uncomment the line below
+    #value: "image-registry.openshift-image-registry.svc:5000/tutorial/helloworld"

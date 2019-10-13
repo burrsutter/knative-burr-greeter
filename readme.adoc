@@ -1,0 +1,345 @@
+== Tekton & Knative 
+
+https://bit.ly/knative-tutorial[Knative & Tekton Tutorial]
+
+* A Task is a step in the pipeline, it is a pod, each step is its own container
+ examples of tasks:
+ mvn clean package
+* Pipeline is a series of tasks   
+* Pipeline Resources - inputs or outputs
+  in: git repository
+  out: image registry
+* PipelineRun is the actual execution and result
+* TaskRun is the actual execution and result of each Task
+
+=== 0: Env
+----
+export MINIKUBE_HOME=/Users/burrsutter/11steps;
+# this is where the minikube executable is
+export PATH=$MINIKUBE_HOME/bin:$PATH
+export KUBECONFIG=$MINIKUBE_HOME/.kube/config
+export KUBE_EDITOR="code -w"
+----
+
+=== 1: Start minikube
+----
+minikube profile knative2
+
+minikube start -p knative2 --memory=8192 --cpus=4 \
+  --kubernetes-version=v1.14.0 \
+  --vm-driver=virtualbox \
+  --disk-size=50g \
+--extra-config=apiserver.enable-admission-plugins="LimitRanger,NamespaceExists,NamespaceLifecycle,ResourceQuota,ServiceAccount,DefaultStorageClass,MutatingAdmissionWebhook"
+
+minikube --profile knative2 addons enable registry
+
+kubectl get pods -n kube-system | grep registry
+----
+
+=== 2: Configure registry helpers
+----
+kubectl apply -n kube-system -f https://raw.githubusercontent.com/redhat-developer-demos/knative-tutorial/release/0.7.x/apps/minikube-registry-helper/registry-aliases-config.yaml
+
+
+kubectl apply -n kube-system -f https://raw.githubusercontent.com/redhat-developer-demos/knative-tutorial/release/0.7.x/apps/minikube-registry-helper/node-etc-hosts-update.yaml
+
+minikube ssh -- sudo cat /etc/hosts
+
+127.0.0.1	localhost
+127.0.1.1 knative2
+10.109.48.76	dev.local
+10.109.48.76	example.com
+----
+
+==== 3: Patch CoreDNS
+----
+git clone -b release/0.7.x https://github.com/redhat-developer-demos/knative-tutorial
+
+cd knative-tutorial/apps/minikube-registry-helper
+./patch-coredns.sh
+----
+
+==== 4: Check patched CoreDNS
+----
+kubectl get cm -n kube-system coredns -o yaml
+
+apiVersion: v1
+data:
+  Corefile: |-
+    .:53 {
+        errors
+        health
+    rewrite name dev.local  registry.kube-system.svc.cluster.local
+    rewrite name example.com  registry.kube-system.svc.cluster.local
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+           pods insecure
+           upstream
+           fallthrough in-addr.arpa ip6.arpa
+        }
+        prometheus :9153
+        forward . /etc/resolv.conf
+        cache 30
+        loop
+        reload
+        loadbalance
+    }
+kind: ConfigMap
+metadata:
+  creationTimestamp: "2019-10-13T18:15:50Z"
+  name: coredns
+  namespace: kube-system
+  resourceVersion: "2632"
+  selfLink: /api/v1/namespaces/kube-system/configmaps/coredns
+  uid: 7cd366c0-ede5-11e9-a650-080027ffade1
+----
+
+=== 5: Install Istio  
+----  
+kubectl apply --filename https://raw.githubusercontent.com/knative/serving/v0.7.1/third_party/istio-1.1.7/istio-crds.yaml 
+
+kubectl apply --filename https://raw.githubusercontent.com/knative/serving/v0.7.1/third_party/istio-1.1.7/istio-lean.yaml
+
+watch kubectl get pods -n istio-system
+----
+
+=== 6: Install Knative CRDs
+----
+kubectl apply --selector knative.dev/crd-install=true \
+  --filename https://github.com/knative/serving/releases/download/v0.7.1/serving.yaml \
+  --filename https://github.com/knative/eventing/releases/download/v0.7.1/release.yaml
+  
+kubectl get crds | grep knative
+----
+
+=== 7: Install Knative Serving
+----
+kubectl apply --selector networking.knative.dev/certificate-provider!=cert-manager \
+  --filename https://github.com/knative/serving/releases/download/v0.7.1/serving.yaml
+
+watch kubectl get pods -n knative-serving
+----
+
+=== 8: Install Knative Eventing
+----
+kubectl apply --selector networking.knative.dev/certificate-provider!=cert-manager \
+  --filename https://github.com/knative/eventing/releases/download/v0.7.1/release.yaml
+  
+watch kubectl get pods -n knative-eventing 
+----
+
+=== 9: Install Tekton
+----
+kubectl apply --filename \
+  https://storage.googleapis.com/tekton-releases/previous/v0.7.0/release.yaml
+
+kubectl api-resources --api-group='tekton.dev'
+
+watch kubectl get pods -n tekton-pipelines
+----
+
+=== 8: Install tkn CLI
+----
+curl -L https://github.com/tektoncd/cli/releases/download/v0.4.0/tkn_0.4.0_Darwin_x86_64.tar.gz | tar xz
+
+mv tkn ./bin
+
+export PATH=/whereIplaced_tkn/bin/:$PATH
+
+tkn version
+Client version: 0.4.0
+
+tkn --help
+----
+
+=== 9: Setup a Nexus
+this will make subsequent pipeline runs faster as the maven artifacts start to be cached
+
+----
+kubectl create namespace nexus
+
+kubectl -n nexus create -f https://raw.githubusercontent.com/redhat-developer-demos/knative-tutorial/release/0.7.x/apps/nexus/skaffold.yaml
+
+watch kubectl -n nexus get pods 
+----
+
+
+=== 10: Create a namespace for the demo stuff
+----
+kubectl create namespace knativetutorial
+kubens knativetutorial
+
+# fork via Github GUI
+https://github.com/burrsutter/knative-burr-greeter
+
+# and clone this repo locally
+
+git clone https://github.com/<YOUR_USER_NAME>/knative-burr-greeter
+cd knative-burr-greeter
+----
+
+=== 11: Create PipelineResource
+
+----
+kubectl create -f tektonfiles/build-resources-burr.yaml
+tkn res ls
+
+burr-git-source                  git     url: https://github.com/burrsutter/knative-burr-greeter
+burr-greeter-image               image   url: dev.local/rhdevelopers/burr-greeter
+----
+
+=== 12: Create the Custom Task
+----
+kubectl -n knativetutorial create -f  https://raw.githubusercontent.com/redhat-developer-demos/knative-tutorial/release/0.7.x/06-pipelines/build-app-task.yaml
+
+tkn task ls
+
+NAME        AGE
+build-app   5 minutes ago
+----
+
+=== 13: Add the kn Task
+----
+kubectl create -n knativetutorial -f https://raw.githubusercontent.com/tektoncd/catalog/master/kn/kn.yaml
+
+tkn task ls
+
+NAME        AGE
+build-app   1 minute ago
+kn          4 seconds ago
+----
+
+=== 14: Pipeline ServiceAccount Role
+----
+kubectl create -n knativetutorial -f https://raw.githubusercontent.com/redhat-developer-demos/knative-tutorial/release/0.7.x/06-pipelines/pipeline-sa-role.yaml
+----
+
+=== 15: Create Pipeline for Quarkus
+----
+kubectl create -n knativetutorial -f tektonfiles/kn-svc-deploy-burr.yaml
+
+tkn pipeline ls
+
+NAME          AGE              LAST RUN   STARTED   DURATION   STATUS
+burr-deploy   35 seconds ago   ---        ---       ---        ---
+----
+
+=== 16: Start the Pipeline
+----
+watch kubectl get pods
+
+tkn pipeline start burr-deploy \
+ --param="mavenMirrorUrl=http://nexus.nexus.svc.cluster.local:8081/nexus/content/groups/public" \
+ --resource="appSource=burr-git-source" \
+ --resource="appImage=burr-greeter-image" \
+ --serviceaccount='pipeline'
+----
+
+note: you can trigger the "start" manually, every time the code changes
+
+=== 17: Monitor the logs of the Pipeline Run
+"burr-deploy-run-mrqg6" is created dyanmically and the following line is actually the output of the previous "tkn pipeline start" command
+----
+tkn pipelinerun logs burr-deploy-run-mrqg6 -f -n knativetutorial
+
+# and
+
+watch tkn pipeline ls
+----
+
+https://screencast.com/t/FrNqrKntWx[Screenshot of iTerm]
+
+=== 18: Resulting ksvc
+----
+kubectl get ksvc
+
+NAME           URL                                               LATESTCREATED        LATESTREADY          READY   REASON
+burr-greeter   http://burr-greeter.knativetutorial.example.com   burr-greeter-8n6km   burr-greeter-8n6km   True
+----
+
+note: the "burr-greeter.knativetutorial.example.com" string is needed next. 
+this script will allow you pull it out
+----
+HOST_URL=$(kubectl get routes.serving.knative.dev quarked -o jsonpath='{.status.url}')
+STRIPPED=$(echo $HOST_URL | cut -f2 -d':' | cut -f3 -d'/')
+----
+
+
+=== 19: Invoke the Knative Serving Service (ksvc)
+---- 
+IP_ADDRESS="$(minikube ip):$(kubectl get svc istio-ingressgateway --namespace istio-system --output 'jsonpath={.spec.ports[?(@.port==80)].nodePort}')"
+ 
+curl -H "Host: burr-greeter.knativetutorial.example.com" $IP_ADDRESS
+
+# or with a time duration
+
+time curl -H "Host: burr-greeter.knativetutorial.example.com" $IP_ADDRESS
+
+Aloha burr-greeter => 'burr-greeter-8n6km-deployment-9c5c669c8-h94sv' : 1
+---- 
+  
+=== 20: Modify Code  
+----
+cd quarkus
+code .
+mvn compile quarkus:dev
+
+# GreetingService.java
+
+private static final String RESPONSE_STRING_FORMAT = "%s burr-greeter HERE => '%s' : %d\n";
+----
+
+----
+curl localhost:8080
+
+Aloha burr-greeter HERE => 'unknown' : 1
+
+ctrl-c
+----
+
+----
+git commit -am "added HERE"
+git push 
+----
+
+=== 21: Modify the Build Resources
+----
+vi tektonfiles/build-resources-burr.yaml
+
+value: https://github.com/<YOUR_USER_NAME>/knative-burr-greeter
+
+kubectl replace -f tektonfiles/build-resources-burr.yaml
+----
+
+=== 22: Run the pipeline again
+----
+tkn pipeline start burr-deploy \
+ --param="mavenMirrorUrl=http://nexus.nexus.svc.cluster.local:8081/nexus/content/groups/public" \
+ --resource="appSource=burr-git-source" \
+ --resource="appImage=burr-greeter-image" \
+ --serviceaccount='pipeline'
+----
+
+=== 23: Invoke the resulting ksvc again
+----
+time curl -H "Host: burr-greeter.knativetutorial.example.com" $IP_ADDRESS
+----
+
+SpringBoot Option:
+
+kubectl create -f build-resources-burr-sb.yaml
+kubectl create -f kn-svc-deploy-burr-sb.yaml
+
+
+tkn pipeline start burr-sb-deploy \
+ --param="mavenMirrorUrl=http://nexus:8081/nexus/content/groups/public" \
+ --resource="appSource=burr-sb-git-source" \
+ --resource="appImage=burr-sb-greeter-image" \
+ --serviceaccount='pipeline'
+
+time curl -H "Host: burr-sb-greeter.knativetutorial.example.com" $IP_ADDRESS
+
+=== clean up completed pods
+----
+kubectl get pods --field-selector=status.phase!=Running
+kubectl delete pods --field-selector=status.phase=Succeeded 
+----
