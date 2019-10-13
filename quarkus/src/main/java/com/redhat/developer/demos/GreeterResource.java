@@ -13,7 +13,7 @@ public class GreeterResource {
   GreetingService greetingService;
 
   @Inject
-  @ConfigProperty(name = "MESSAGE_PREFIX", defaultValue = "Hi")
+  @ConfigProperty(name = "MESSAGE_PREFIX", defaultValue = "Aloha")
   String messagePrefix;
 
   @GET

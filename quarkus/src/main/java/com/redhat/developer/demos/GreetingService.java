@@ -15,7 +15,8 @@ public class GreetingService {
 
   private final SimpleDateFormat SDF = new SimpleDateFormat("HH:mm:ss");
 
-  private static final String RESPONSE_STRING_FORMAT = "%s %s greeter => '%s' : %d\n";
+  // private static final String RESPONSE_STRING_FORMAT = "%s %s greeter => '%s' : %d\n";
+  private static final String RESPONSE_STRING_FORMAT = "%s burr-greeter => '%s' : %d\n";
 
   private static final String HOSTNAME =
     parseContainerIdFromHostname(System.getenv().getOrDefault("HOSTNAME", "unknown"));
@@ -31,7 +32,8 @@ public class GreetingService {
 
   public String greet(String prefix) {
     count++;
-    return String.format(RESPONSE_STRING_FORMAT, prefix, "", HOSTNAME, count);
+    //return String.format(RESPONSE_STRING_FORMAT, prefix, "", HOSTNAME, count);
+    return String.format(RESPONSE_STRING_FORMAT, prefix, HOSTNAME, count);
   }
 
   String eventGreet(String cloudEventJson) {
