@@ -17,7 +17,8 @@ public class GreeterController {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GreeterController.class);
 
-    private static final String RESPONSE_STRING_FORMAT = "%s %s greeter => '%s' : %d\n";
+    // private static final String RESPONSE_STRING_FORMAT = "%s %s greeter => '%s' : %d\n";
+    private static final String RESPONSE_STRING_FORMAT = "%s burr-sb-greeter => '%s' : %d\n";
 
     private final SimpleDateFormat SDF = new SimpleDateFormat("HH:mm:ss");
 
@@ -28,7 +29,7 @@ public class GreeterController {
         return hostname.replaceAll("greeter-v\\d+-", "");
     }
 
-    @Value("${MESSAGE_PREFIX:Hi}")
+    @Value("${MESSAGE_PREFIX:Hola}")
     private String prefix;
 
     /**
@@ -40,7 +41,8 @@ public class GreeterController {
     @GetMapping("/")
     public String greet() {
         count++;
-        return String.format(RESPONSE_STRING_FORMAT, prefix, "", HOSTNAME, count);
+        // return String.format(RESPONSE_STRING_FORMAT, prefix, "", HOSTNAME, count);
+        return String.format(RESPONSE_STRING_FORMAT, prefix, HOSTNAME, count);
     }
 
     @PostMapping("/")
