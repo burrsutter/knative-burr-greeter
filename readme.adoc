@@ -324,22 +324,24 @@ tkn pipeline start burr-deploy \
 time curl -H "Host: burr-greeter.knativetutorial.example.com" $IP_ADDRESS
 ----
 
-SpringBoot Option:
+=== clean up completed pods
+----
+kubectl get pods --field-selector=status.phase!=Running
+kubectl delete pods --field-selector=status.phase=Succeeded 
+----
 
-kubectl create -f build-resources-burr-sb.yaml
-kubectl create -f kn-svc-deploy-burr-sb.yaml
+=== SpringBoot Pipeline
+----
+kubectl create -f tektonfiles/build-resources-burr-sb.yaml
+kubectl create -f tektonfiles/kn-svc-deploy-burr-sb.yaml
+----
 
-
+----
 tkn pipeline start burr-sb-deploy \
- --param="mavenMirrorUrl=http://nexus:8081/nexus/content/groups/public" \
+ --param="mavenMirrorUrl=http://nexus.nexus.svc.cluster.local:8081/nexus/content/groups/public" \
  --resource="appSource=burr-sb-git-source" \
  --resource="appImage=burr-sb-greeter-image" \
  --serviceaccount='pipeline'
 
 time curl -H "Host: burr-sb-greeter.knativetutorial.example.com" $IP_ADDRESS
-
-=== clean up completed pods
-----
-kubectl get pods --field-selector=status.phase!=Running
-kubectl delete pods --field-selector=status.phase=Succeeded 
 ----
