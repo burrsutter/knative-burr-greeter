@@ -23,15 +23,15 @@ export KUBE_EDITOR="code -w"
 
 === 1: Start minikube
 ----
-minikube profile knative2
+minikube profile knative
 
-minikube start -p knative2 --memory=8192 --cpus=4 \
+minikube start -p knative --memory=8192 --cpus=4 \
   --kubernetes-version=v1.14.0 \
   --vm-driver=virtualbox \
   --disk-size=50g \
 --extra-config=apiserver.enable-admission-plugins="LimitRanger,NamespaceExists,NamespaceLifecycle,ResourceQuota,ServiceAccount,DefaultStorageClass,MutatingAdmissionWebhook"
 
-minikube --profile knative2 addons enable registry
+minikube --profile knative addons enable registry
 
 kubectl get pods -n kube-system | grep registry
 ----
@@ -46,7 +46,7 @@ kubectl apply -n kube-system -f https://raw.githubusercontent.com/redhat-develop
 minikube ssh -- sudo cat /etc/hosts
 
 127.0.0.1	localhost
-127.0.1.1 knative2
+127.0.1.1 knative
 10.109.48.76	dev.local
 10.109.48.76	example.com
 ----
